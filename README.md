@@ -37,7 +37,8 @@ pip install haste_tf
 ```
 
 ### Building from source
-Currenty supported only on Linux, use Docker for building on Windows.
+> **Note**
+> Currenty supported only on Linux, use Docker for building on Windows.
 
 ```bash
 make evnn_pytorch # Build PyTorch API
@@ -91,9 +92,9 @@ use python unittest with this command
 ```
 python -m unittest discover -p '*_test.py' -s validation
 ```
-
-Tests will fail if you set the the dimensions (batch_size,time_steps,input_size,
-hidden_size) too high, this is because floating point errors can accumulated and cause the units to generate events one timestep off. This causes the numerical tests to fail but the Neural Network training will work.
+> **Note**
+> Tests will fail if you set the the dimensions (batch_size,time_steps,input_size,
+hidden_size) too high, this is because floating point errors can accumulate and cause the units to generate events one timestep off. This causes the numerical tests to fail but the Neural Network training will work without any issues.
 
 ## Implementation notes
 - the EGRU is based on Haste GRU which is in turn based on `1406.1078v1` (same as cuDNN) rather than `1406.1078v3`
