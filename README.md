@@ -30,11 +30,10 @@ Here's what you'll need to get started:
 
 Once you have the prerequisites, you can install with pip or by building the source code.
 
-### Using pip
+<!-- ### Using pip
 ```
-pip install haste_pytorch
-pip install haste_tf
-```
+pip install evnn_pytorch
+``` -->
 
 ### Building from source
 > **Note**
