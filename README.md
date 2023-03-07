@@ -12,7 +12,7 @@ Event based GRU was publised as a conference paper at ICLR 2023: [Efficient recu
 **E:** Activity-sparse backward dynamics for two EGRU units ($i$ and $j$). 
 (Note that we only have to backpropagate through units that were active or whose state was close to the threshold at each time step.)*
 
-<!-- ![EvNN Animation](./media/videos/anim/1080p60/EvNNPlot_ManimCE_v0.17.2.gif) -->
+![EvNN Animation](./media/videos/anim/1080p60/EvNNPlot_ManimCE_v0.17.2.gif)
 
 Which RNN types are currently supported?
 - [GRU](https://en.wikipedia.org/wiki/Gated_recurrent_unit)
