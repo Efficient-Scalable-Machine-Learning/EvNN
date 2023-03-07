@@ -37,6 +37,7 @@ pip install evnn_pytorch
 
 ### Building from source
 > **Note**
+> 
 > Currenty supported only on Linux, use Docker for building on Windows.
 
 ```bash
@@ -92,6 +93,7 @@ use python unittest with this command
 python -m unittest discover -p '*_test.py' -s validation
 ```
 > **Note**
+> 
 > Tests will fail if you set the the dimensions (batch_size,time_steps,input_size,
 hidden_size) too high, this is because floating point errors can accumulate and cause the units to generate events one timestep off. This causes the numerical tests to fail but the Neural Network training will work without any issues.
 
