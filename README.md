@@ -8,8 +8,8 @@ Event based GRU was publised as a conference paper at ICLR 2023: [Efficient recu
 **A.** A single unit of the original GRU model adapted from [Cho et al.](#references). 
 **B:** EGRU unit with event generating mechanism. 
 **C:** Heaviside function and surrogate gradient.
-**D:** Forward state dynamics for two EGRU units ($i$ and $j$).
-**E:** Activity-sparse backward dynamics for two EGRU units ($i$ and $j$). 
+**D:** Forward state dynamics for two EGRU units (*$i$ *and* $j$ *).
+**E:** Activity-sparse backward dynamics for two EGRU units (*$i$ *and* $j$ *). 
 (Note that we only have to backpropagate through units that were active or whose state was close to the threshold at each time step.)*
 
 ![EvNN Animation](./media/videos/anim/1080p60/EvNNPlot_ManimCE_v0.17.2.gif)
