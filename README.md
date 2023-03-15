@@ -26,6 +26,7 @@ Here's what you'll need to get started:
 - a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 3.7+ GPU (required only if using GPU)
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) 10.0+ (required only if using GPU)
 - [PyTorch](https://pytorch.org) 1.3+ for PyTorch integration (GPU optional)
+- [BLAS](https://netlib.org/blas/) or any BLAS-like library for CPU computation.
 - [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
 
 Once you have the prerequisites, you can install with pip or by building the source code.
@@ -57,6 +58,8 @@ CUDA_HOME=/usr/local/cuda-10.2 make
 
 ## Performance
 
+Code for the experiments and benchmarks presented in the paper are published in ``benchmarks`` directory.
+Note that these benchmarks have additional dependencies as documented in `benchmarks/requirements.txt`
 
 ## Documentation
 
@@ -81,13 +84,15 @@ The PyTorch API is documented in [`docs/pytorch/evnn_pytorch.md`](docs/pytorch/e
 
 ## Code layout
 - [`docs/pytorch/`](docs/pytorch): API reference documentation for `evnn_pytorch`
-- [`examples/`](examples): C++ inference / training code using `libevnn` used by the authors to debug, not recommended for production use.
 - [`frameworks/pytorch/`](frameworks/pytorch): PyTorch API and custom op code
 - [`lib/`](lib): CUDA kernels and C++ API
 - [`validation/`](validation): scripts and tests to validate output and gradients of RNN layers
+- [`benchmarks/`](benchmarks): Experiments from ICLR 2023 Paper.
 
 ## Testing
 use python unittest with this command
+
+- Numpy is required for testing
 
 ```
 python -m unittest discover -p '*_test.py' -s validation

@@ -1,0 +1,14 @@
+
+https://github.com/IGITUGraz/sdict/archive/master.zip
+https://github.com/IGITUGraz/SimRecorder/archive/master.zip
+https://github.com/IGITUGraz/SimManager/archive/refs/tags/v0.8.4.zip
+ipdb
+pyyaml
+tqdm
+tonic
+matplotlib
+tensorboardX
+torchdiffeq
+prettytable
+h5py
+haste_pytorch
