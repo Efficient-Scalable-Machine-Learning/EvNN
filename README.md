@@ -1,4 +1,8 @@
+# EvNN: Event-based Neural Networks
+
 EvNN is a CUDA and C++ implementation of event-based RNN layers with built-in [DropConnect](http://proceedings.mlr.press/v28/wan13.html) and [Zoneout](https://arxiv.org/abs/1606.01305) regularization. These layers are exposed through C++ and Pytorch APIs for easy integration into your own projects or machine learning frameworks. The code framework and base layers are adopted from [Haste](https://github.com/lmnt-com/haste/) Library.
+
+## EGRU: Event-based Gated Recurrent Unit
 
 Event based GRU was publised as a conference paper at ICLR 2023: [Efficient recurrent architectures through activity sparsity and sparse back-propagation through time](https://openreview.net/pdf?id=lJdOlWg8td) (**notable-top-25%**)
 
