@@ -26,7 +26,6 @@ import data as d
 from eval import evaluate
 from models import LanguageModel
 
-import wandb
 
 class RNNType(Enum):
     LSTM = 'lstm'
@@ -72,7 +71,6 @@ def get_args():
     argparser.add_argument('--thr_init_mean', type=float, default=0.2)
     argparser.add_argument('--weight_init_gain', type=float, default=1.0)
     argparser.add_argument('--prune', nargs='*', type=float, default=0.0)
-    argparser.add_argument('--wandb', action='store_true')
 
     return argparser.parse_args()
 
@@ -145,12 +143,6 @@ def main(args):
     print(f"Model Parameter Count: {config['num_parameters']}")
 
     model_signature = 'rnn_type={0}__nlayers{1}_lr={2}_decay={3}'.format(args.rnn_type, args.layers, args.learning_rate, args.weight_decay)
-
-    if args.wandb:
-        wandb.init(project=f"{args.dataset} - {args.rnn_type}", config=config, entity="evnn-neurips")
-        wandb.run.name = model_signature
-        wandb.run.save()
-        wandb.watch(model, log='all')
 
     # MODEL PRUNING
     pruning = False
@@ -275,22 +267,6 @@ def main(args):
             mean_bw_sparsity = np.dot(bw_sparsity, np.array(hidden_dims)) / np.sum(np.array(hidden_dims))
             print(f'backward sparsity {mean_bw_sparsity}')
         print('-' * 89)
-
-        if args.wandb:
-            log = {'Loss/Training': train_loss,
-                   'Loss/Validation': val_loss,
-                   'Perplexity/Validation': val_ppl,
-                   'BPC/Validation': val_loss / math.log(2),
-                   'Monitoring/Active Units': mean_activity,
-                   'Monitoring/Forward Sparsity': 100 * (1 - mean_activity),
-                   'Monitoring/Learning Rate': optimizer.param_groups[0]['lr']}
-            log.update({f'Monitoring/Active Units Layer {i}': layerwise_activity_mean[i] for i in range(model.nlayers)})
-            log.update({f'Monitoring/Active Units Layer {i} std': layerwise_activity_std[i] for i in range(model.nlayers)})
-            if return_bw_sparsity:
-                log.update({f'Monitoring/Backward Sparsity Layer {i}': bw_sparsity[i] for i in range(model.nlayers)})
-                log.update({'Monitoring/Backward Sparsity': mean_bw_sparsity * 100})
-            wandb.log(log)
-            wandb.run.summary['Best Val PPL'] = math.exp(best_val_loss)
 
         # if the loss diverged to infinity, stop training
         if np.isnan(val_loss).any():
