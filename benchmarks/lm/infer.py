@@ -23,9 +23,9 @@ import h5py
 import torch
 import torch.nn
 
-import lm.data as d
-from lm.models import LanguageModel
-from lm.eval import evaluate
+import data as d
+from models import LanguageModel
+from eval import evaluate
 
 
 def get_args():
@@ -85,7 +85,7 @@ def main(args):
         model = LanguageModel(**model_args).to(device)
     elif config['rnn_type'] == 'egru':
         model = LanguageModel(**model_args,
-                              dampening_factor=config['damp_factor'],
+                              dampening_factor=config['pseudo_derivative_width'],
                               pseudo_derivative_support=config['pseudo_derivative_width']).to(device)
     else:
         raise RuntimeError("Unknown RNN type: %s" % config['rnn_type'])
