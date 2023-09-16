@@ -93,6 +93,11 @@ def main(args):
     best_model_path = os.path.join(args.directory, 'checkpoints', f"{config['rnn_type'].upper()}_best_model.cpt")
     model.load_state_dict(torch.load(best_model_path, map_location=device))
 
+    if model_args['rnn_type'] == 'egru':
+        hidden_dims = [rnn.hidden_size for rnn in model.rnns]
+    else:
+        hidden_dims = [rnn.module.hidden_size if args.dropout_connect > 0 else rnn.hidden_size for rnn in model.rnns]
+
     criterion = torch.nn.CrossEntropyLoss()
 
     if args.hidden:
@@ -104,6 +109,7 @@ def main(args):
                      bptt=config['bptt'],
                      ntokens=vocab_size,
                      device=device,
+                     hidden_dims=hidden_dims,
                      return_hidden=True)
         save_file = os.path.join(args.directory, f'hidden_states_{args.datasplit}.hdf')
         with h5py.File(save_file, 'w') as f:
@@ -121,6 +127,7 @@ def main(args):
                      bptt=config['bptt'],
                      ntokens=vocab_size,
                      device=device,
+                     hidden_dims=hidden_dims,
                      return_hidden=False)
 
     test_ppl = math.exp(test_loss)
@@ -130,58 +137,6 @@ def main(args):
           f'test mean activity {test_activity}')
     print(f'Layerwise activity {test_layerwise_activity_mean.tolist()} +- {test_layerwise_activity_std.tolist()}')
     print('=' * 89)
-
-    if args.prune > 0.0 and args.hidden:
-        print(f"Model Parameter Count: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-        input_indices = torch.arange(model.rnns[0].input_size).to(device)
-        for i in range(model.nlayers):
-            if i < model.nlayers - 1:
-                # get event frequencies
-                hid_dim = all_hiddens[i].shape[2]
-                hid_cells = all_hiddens[i].reshape(-1, hid_dim)
-                seq_len = hid_cells.shape[0]
-                spike_frequency = torch.sum(hid_cells != 0, dim=0) / seq_len
-                print(
-                    f"Layer {i + 1}: "
-                    f"less than 1/100: {torch.sum(spike_frequency < 0.01)} / {spike_frequency.shape} "
-                    f"// never: {torch.sum(hid_cells.sum(dim=0) == 0)} / {spike_frequency.shape}")
-
-                # compute remaining indicies from spike frequencies
-                topk = int(model.rnns[i].hidden_size * (1 - args.prune))
-                hidden_indices, _ = torch.sort(torch.argsort(spike_frequency, descending=True)[:topk], descending=False)
-                hidden_indices = hidden_indices.to(device)
-            else:
-                hidden_indices = torch.arange(model.rnns[i].hidden_size).to(device)
-            model.rnns[i].prune_units(input_indices, hidden_indices)
-            input_indices = hidden_indices
-
-        print(f"Model Parameter Count: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-
-        test_loss, test_activity, test_layerwise_activity_mean, test_layerwise_activity_std, centered_cell_states, all_hiddens = \
-            evaluate(model=model,
-                     eval_data=test_data,
-                     criterion=criterion,
-                     batch_size=args.batch_size,
-                     bptt=config['bptt'],
-                     ntokens=vocab_size,
-                     device=device,
-                     return_hidden=True)
-        for i in range(model.nlayers - 1):
-            # get event frequencies
-            hid_dim = all_hiddens[i].shape[2]
-            hid_cells = all_hiddens[i].reshape(-1, hid_dim)
-            seq_len = hid_cells.shape[0]
-            spike_frequency = torch.sum(hid_cells != 0, dim=0) / seq_len
-            print(
-                f"less than 1/100: {torch.sum(spike_frequency < 0.01)} / {spike_frequency.shape} "
-                f"// never: {torch.sum(hid_cells.sum(dim=0) == 0)} / {spike_frequency.shape}")
-        test_ppl = math.exp(test_loss)
-        print('=' * 89)
-        print(f'| Inference | test loss {test_loss:5.2f} | '
-              f'test ppl {test_ppl:8.2f} | '
-              f'test mean activity {test_activity}')
-        print(f'Layerwise activity {test_layerwise_activity_mean.tolist()} +- {test_layerwise_activity_std.tolist()}')
-        print('=' * 89)
 
 
 if __name__ == "__main__":
