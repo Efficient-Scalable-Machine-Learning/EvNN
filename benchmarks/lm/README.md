@@ -4,18 +4,30 @@ To run the language modeling experiments, first download the data
 
     ./getdata <data_dir>
 
-Then run Penn Treebank experiments with EGRU (1350 units)
+We [provide checkpoints for EGRU](https://cloudstore.zih.tu-dresden.de/index.php/s/NPQ9pLnpZnTsM5X) with 3 layers of hidden size (1350, 1350, 750)
 
-    python lm/train.py --data path_to_your_data --scratch ./log --dataset PTB --epochs 2500 --rnn_type egru --layers 3 --hidden_dim 1350 --batch_size=64 --bptt=68 --dropout_connect=0.6788113982442464 --dropout_emb=0.7069992062976298 --dropout_forward=0.2641540030663871 --dropout_words=0.05460274136214911 --emb_dim=788 --learning_rate=0.00044406742918918466 --pseudo_derivative_width=2.179414375864446 --thr_init_mean=-3.76855645544185 --weight_decay=9.005509348932795e-06 --seed 12008
+# Penn Treebank
+To train EGRU on Penn Treebank word-level language modeling, run
 
-or EGRU (2000 units)
+    python benchmarks/lm/train.py --data=/path/to/data --scratch=/your/scratch/directory/Experiments --dataset=PTB --epochs=1000 --batch_size=64 --rnn_type=egru --layer=3 --bptt=70 --scheduler=cosine --weight_decay=0.10 --learning_rate=0.0012 --learning_rate_thresholds 0.0 --emb_dim=750 --dropout_emb=0.6 --dropout_words=0.1 --dropout_forward=0.25 --grad_clip=0.1 --thr_init_mean=0.01 --dropout_connect=0.7 --hidden_dim=1350 --pseudo_derivative_width=3.6 --scheduler_start=700 --seed=9612
 
-    python lm/train.py --data path_to_your_data --scratch ./log --dataset PTB --epochs 2500 --rnn_type egru --layers 3 --hidden_dim 2000 --batch_size=128 --bptt=67 --dropout_connect=0.621405385527356 --dropout_emb=0.7651296208061924 --dropout_forward=0.24131807369801447 --dropout_words=0.14942681962154375 --emb_dim=786 --learning_rate=0.000494172266064804 --pseudo_derivative_width=2.35216907207571 --thr_init_mean=-3.4957794302256007 --weight_decay=6.6878095661652755e-06 --seed 52798
+For inference with the [provided checkpoint](https://cloudstore.zih.tu-dresden.de/index.php/s/NPQ9pLnpZnTsM5X), run
+
+    python benchmarks/lm/infer.py --data /path/to/data --dataset PTB --datasplit test --batch_size 1 --directory /path/to/checkpoint
+
+# Wikitext-2
+To train EGRU on Wikitext-2, run
+
+    python benchmarks/lm/train.py --data=/your/data/directory --scratch=/your/scratch/directory/Experiments --dataset=WT2 --epochs=800 --batch_size=128 --rnn_type=egru --layer=3 --bptt=70 --scheduler=cosine --weight_decay=0.12 --learning_rate=0.001 --learning_rate_thresholds 0.0 --emb_dim=750 --dropout_emb=0.7 --dropout_words=0.1 --dropout_forward=0.25 --grad_clip=0.1 --thr_init_mean=0.01 --dropout_connect=0.7 --hidden_dim=1350 --pseudo_derivative_width=3.6 --scheduler_start=400 --seed=913420
+
+For inference with the [provided checkpoint](https://cloudstore.zih.tu-dresden.de/index.php/s/NPQ9pLnpZnTsM5X), run
+
+    python benchmarks/lm/infer.py --data /path/to/data --dataset WT2 --datasplit test --batch_size 1 --directory /path/to/checkpoint
 
 Various flags can be passed to change the defaults parameters. 
 See "train.py" for a list of all available arguments.
 
-This code was tested with PyTorch >= 1.9.0
+This code was tested with PyTorch >= 1.9.0, CUDA 11.
 
 A large batch of code stems from Salesforce AWD-LSTM implementation:
 https://github.com/salesforce/awd-lstm-lm

@@ -17,8 +17,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import evnn_pytorch as evnn
-from lm.modules import VariationalDropout, WeightDrop
-from lm.embedding_dropout import embedded_dropout
+from modules import VariationalDropout, WeightDrop
+from embedding_dropout import embedded_dropout
 from typing import Union
 
 
