@@ -1,0 +1,5 @@
+include frameworks/pytorch/*.h
+include frameworks/pytorch/*.cc
+include lib/*.cc
+include lib/*.h
+include lib/evnn/*.h
