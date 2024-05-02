@@ -35,7 +35,7 @@ def get_gpu_arch_flags():
 
 arch_flags = get_gpu_arch_flags()
 
-VERSION = '0.1.0'
+VERSION = '0.2.0'
 DESCRIPTION = 'EVNN: a torch extension for custom event based RNN models.'
 AUTHOR = 'TUD and RUB'
 AUTHOR_EMAIL = 'khaleelulla.khan_nazeer@tu-dresden.de'
@@ -47,9 +47,8 @@ CLASSIFIERS = [
     'Intended Audience :: Education',
     'Intended Audience :: Science/Research',
     'License :: OSI Approved :: Apache Software License',
-    'Programming Language :: Python :: 3.6',
-    'Programming Language :: Python :: 3.7',
-    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
     'Topic :: Scientific/Engineering :: Mathematics',
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: Software Development :: Libraries',

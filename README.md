@@ -30,8 +30,7 @@ Here's what you'll need to get started:
 - a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 3.7+ GPU (required only if using GPU)
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) 11.0+ (required only if using GPU)
 - [PyTorch](https://pytorch.org) 1.3+ for PyTorch integration (GPU optional)
-- [BLAS](https://netlib.org/blas/) or any BLAS-like library for CPU computation.
-- [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
+- [OpenBLAS](https://www.openblas.net/) or any BLAS-like library for CPU computation.
 
 Once you have the prerequisites, you can install with pip or by building the source code.
 
