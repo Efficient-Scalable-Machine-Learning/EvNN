@@ -45,20 +45,23 @@ pip install evnn_pytorch
 > 
 > Currenty supported only on Linux, use Docker for building on Windows.
 
+Build and install it with `pip`:
 ```bash
-make evnn_pytorch # Build PyTorch API
+pip install .
+```
+### Building in Docker
+
+Build docker image:
+```bash
+docker build -t evnn -f docker/Dockerfile .
 ```
 
-If you built the PyTorch API, install it with `pip`:
+Example usage:
 ```bash
-pip install evnn_pytorch-*.whl
+docker run --rm --gpus=all evnn python -c "import torch;import evnn_pytorch;print(evnn_pytorch.EGRU(10,20))"
 ```
 
-If the CUDA Toolkit that you're building against is not in `/usr/local/cuda`, you must specify the
-`$CUDA_HOME` environment variable before running make:
-```bash
-CUDA_HOME=/usr/local/cuda-10.2 make
-```
+This should print `EGRU()` at the end.
 
 ## Performance
 
