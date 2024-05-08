@@ -37,7 +37,6 @@ def get_args():
     argparser.add_argument('--batch_size', type=int, default=80)
     argparser.add_argument('--directory', type=str, required=False, help='model directory for checkpoints and config')
     argparser.add_argument('--hidden', action='store_true', help='returns the hidden states of the whole dataset to perform analysis')
-    argparser.add_argument('--prune', type=float, default=0.0)
 
     return argparser.parse_args()
 

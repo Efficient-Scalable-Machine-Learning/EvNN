@@ -70,7 +70,6 @@ def get_args():
     argparser.add_argument('--pseudo_derivative_width', type=float, default=1.0)
     argparser.add_argument('--thr_init_mean', type=float, default=0.2)
     argparser.add_argument('--weight_init_gain', type=float, default=1.0)
-    argparser.add_argument('--prune', nargs='*', type=float, default=0.0)
 
     return argparser.parse_args()
 
@@ -143,28 +142,6 @@ def main(args):
     print(f"Model Parameter Count: {config['num_parameters']}")
 
     model_signature = 'rnn_type={0}__nlayers{1}_lr={2}_decay={3}'.format(args.rnn_type, args.layers, args.learning_rate, args.weight_decay)
-
-    # MODEL PRUNING
-    pruning = False
-    print(args.prune)
-    if isinstance(args.prune, list) and len(args.prune) == 1:
-        pruning = True
-        args.prune = args.prune[0]
-    elif isinstance(args.prune, list) and len(args.prune) == args.layers:
-        pruning = True
-
-    if pruning:
-        prune(
-            model=model,
-            criterion=criterion,
-            data=train_data,
-            batch_size=args.batch_size,
-            sequence_length=args.bptt,
-            ntokens=vocab_size,
-            device=device,
-            hidden_dims=hidden_dims,
-            fractions=args.prune
-        )
 
     return_bw_sparsity = True if model.rnn_type == 'egru' else False
 
@@ -315,25 +292,6 @@ def repackage_hidden(h):
             return h.detach()
         else:
             return tuple(repackage_hidden(v) for v in h)
-
-
-def prune(model, criterion, data, batch_size, sequence_length, ntokens, device, hidden_dims, fractions=0.0):
-    print("Pruning model...")
-    test_loss, test_activity, test_layerwise_activity_mean, test_layerwise_activity_std, centered_cell_states, all_hiddens = \
-        evaluate(
-            model=model,
-            eval_data=data,
-            criterion=criterion,
-            batch_size=batch_size,
-            bptt=sequence_length,
-            ntokens=ntokens,
-            device=device,
-            hidden_dims=hidden_dims,
-            return_hidden=True
-        )
-
-    model.prune(fractions, all_hiddens, device)
-    print(f"Perplexity before pruning {math.exp(test_loss)}")
 
 
 def train(model,
