@@ -57,10 +57,12 @@ docker build -t evnn -f docker/Dockerfile .
 
 Example usage:
 ```bash
-docker run --rm --gpus=all evnn python -c "import torch;import evnn_pytorch;print(evnn_pytorch.EGRU(10,20))"
+docker run --rm --gpus=all evnn python -m unittest discover -p "*_test.py" -s /evnn_src/validation -v
 ```
 
-This should print `EGRU()` at the end.
+> **Note**
+> 
+> The build script tries to automatically detect GPU compute capability. In case the GPU is not available during compilation, for example when building with docker or when using compute cluster login nodes for compiling, Use enviroment variable `EVNN_CUDA_COMPUTE` to set the required compute capability.
 
 ## Performance
 

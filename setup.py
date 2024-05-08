@@ -18,7 +18,8 @@
 import os
 
 from glob import glob
-from platform import platform
+import warnings
+import subprocess
 import torch
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension, CUDA_HOME
@@ -26,12 +27,33 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtensio
 
 def get_gpu_arch_flags():
     try:
-        major = torch.cuda.get_device_capability()[0]
-        return [f"-gencode=arch=compute_{major}0,code=sm_{major}0"]
+        major, minor = torch.cuda.get_device_capability()[0]
+        return [f"-gencode=arch=compute_{major}{minor},code=sm_{major}{minor}"]
     except Exception as e:
-        print(f"Error while detecting GPU architecture: {e}")
-        return []
+        warnings.warn(f"Error while detecting GPU architecture: {e}\n \
+                        Use env var EVNN_CUDA_COMPUTE to set cuda compute capability")
+        compute_capability = os.getenv("EVNN_CUDA_COMPUTE", None)
+        if compute_capability is None:
+            warnings.warn("EVNN_CUDA_COMPUTE not defined, using default: 80")
+            compute_capability = 80
 
+        return [f"-gencode=arch=compute_{compute_capability},code=sm_{compute_capability}"]
+
+def check_nvcc_available():
+    try:
+        subprocess.run(["nvcc", "--version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except FileNotFoundError:
+        warnings.warn(
+            f"nvcc was not found. Skip compiling GPU kernels"
+        )
+        return False
+    except subprocess.CalledProcessError:
+        warnings.warn(
+            f"nvcc was not found. Skip compiling GPU kernels"
+        )
+        return False
+    
 
 arch_flags = get_gpu_arch_flags()
 
@@ -60,7 +82,7 @@ with open(f'frameworks/pytorch/_version.py', 'wt') as f:
 
 base_path = os.path.dirname(os.path.realpath(__file__))
 
-if torch.cuda.is_available() and CUDA_HOME is not None:
+if check_nvcc_available():
 
     extension = [CUDAExtension(
         'evnn_pytorch_lib',
@@ -69,8 +91,8 @@ if torch.cuda.is_available() and CUDA_HOME is not None:
                 "cxx": ["-O2", "-std=c++17", "-D_GLIBCXX_USE_CXX11_ABI=0", "-DWITH_CUDA", "-Wno-sign-compare"],
                 "nvcc": ["-O2", "-std=c++17", 
                          "-U__CUDA_NO_HALF_OPERATORS__",
-                        "-U__CUDA_NO_HALF_CONVERSIONS__",
-                        "-D_GLIBCXX_USE_CXX11_ABI=0", "-DWITH_CUDA",
+                         "-U__CUDA_NO_HALF_CONVERSIONS__",
+                         "-D_GLIBCXX_USE_CXX11_ABI=0", "-DWITH_CUDA",
                          "-Xcompiler", "-fPIC", "-lineinfo"]
                 + arch_flags,
         },
