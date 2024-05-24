@@ -34,10 +34,10 @@ Here's what you'll need to get started:
 
 Once you have the prerequisites, you can install with pip or by building the source code.
 
-<!-- ### Using pip
+### Using pip
 ```
 pip install evnn_pytorch
-``` -->
+```
 
 ### Building from source
 > **Note**
@@ -63,6 +63,7 @@ docker run --rm --gpus=all evnn python -m unittest discover -p "*_test.py" -s /e
 > **Note**
 > 
 > The build script tries to automatically detect GPU compute capability. In case the GPU is not available during compilation, for example when building with docker or when using compute cluster login nodes for compiling, Use enviroment variable `EVNN_CUDA_COMPUTE` to set the required compute capability.
+> Example: For CUDA Compute capability 8.0 use ```export EVNN_CUDA_COMPUTE=80```
 
 ## Performance
 
