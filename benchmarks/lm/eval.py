@@ -14,16 +14,15 @@
 # ==============================================================================
 
 import torch
-import lm.data as d
+import data as d
 
 
-def evaluate(model, eval_data, criterion, batch_size, bptt, ntokens, device, return_hidden=False):
+def evaluate(model, eval_data, criterion, batch_size, bptt, ntokens, device, hidden_dims, return_hidden=False):
     # turn on evaluation mode
     model.eval()
 
     # initialize evaluation metrics
     iter_range = range(0, eval_data.size(0) - 1, bptt)
-    hidden_dims = [rnn.hidden_size for rnn in model.rnns]
 
     total_loss = 0.
     mean_activities = torch.zeros(len(iter_range), dtype=torch.float16, device=device)

@@ -30,35 +30,40 @@ Here's what you'll need to get started:
 - a [CUDA Compute Capability](https://developer.nvidia.com/cuda-gpus) 3.7+ GPU (required only if using GPU)
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) 11.0+ (required only if using GPU)
 - [PyTorch](https://pytorch.org) 1.3+ for PyTorch integration (GPU optional)
-- [BLAS](https://netlib.org/blas/) or any BLAS-like library for CPU computation.
-- [Eigen 3](http://eigen.tuxfamily.org/) to build the C++ examples (optional)
+- [OpenBLAS](https://www.openblas.net/) or any BLAS-like library for CPU computation.
 
 Once you have the prerequisites, you can install with pip or by building the source code.
 
-<!-- ### Using pip
+### Using pip
 ```
 pip install evnn_pytorch
-``` -->
+```
 
 ### Building from source
 > **Note**
 > 
 > Currenty supported only on Linux, use Docker for building on Windows.
 
+Build and install it with `pip`:
 ```bash
-make evnn_pytorch # Build PyTorch API
+pip install .
+```
+### Building in Docker
+
+Build docker image:
+```bash
+docker build -t evnn -f docker/Dockerfile .
 ```
 
-If you built the PyTorch API, install it with `pip`:
+Example usage:
 ```bash
-pip install evnn_pytorch-*.whl
+docker run --rm --gpus=all evnn python -m unittest discover -p "*_test.py" -s /evnn_src/validation -v
 ```
 
-If the CUDA Toolkit that you're building against is not in `/usr/local/cuda`, you must specify the
-`$CUDA_HOME` environment variable before running make:
-```bash
-CUDA_HOME=/usr/local/cuda-10.2 make
-```
+> **Note**
+> 
+> The build script tries to automatically detect GPU compute capability. In case the GPU is not available during compilation, for example when building with docker or when using compute cluster login nodes for compiling, Use enviroment variable `EVNN_CUDA_COMPUTE` to set the required compute capability.
+> Example: For CUDA Compute capability 8.0 use ```export EVNN_CUDA_COMPUTE=80```
 
 ## Performance
 

@@ -1,5 +1,14 @@
 # ChangeLog
 
+## 0.2.0-egru (2024-05-24)
+### Changed
+- Simplified install and removed makefile
+- CUDA compute capability is automatically detected
+- Update Readme with the setup instruction
+- Update Dockerfile
+- Cleaned LM pruning code
+
+
 ## 0.1.0-egru (2022-03-01)
 ### Changed
 - Project forked from original

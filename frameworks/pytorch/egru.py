@@ -247,7 +247,8 @@ class EGRU(BaseRNN):
                  zoneout=0.0,
                  dampening_factor=0.7,
                  pseudo_derivative_support=1.0,
-                 thr_mean=0.0,
+                 thr_mean=0.3,
+                 weight_initialization_gain=1.0,
                  return_state_sequence=False,
                  grad_clip=None,
                  use_custom_cuda=True):
@@ -288,6 +289,8 @@ class EGRU(BaseRNN):
         self.dropout = dropout
         self.alpha = torch.tensor(0.9)
 
+        self.weight_initialization_gain = weight_initialization_gain
+
         self.kernel = nn.Parameter(torch.empty(input_size, hidden_size * 3))
         self.recurrent_kernel = nn.Parameter(
             torch.empty(hidden_size, hidden_size * 3))
@@ -299,9 +302,13 @@ class EGRU(BaseRNN):
             torch.Tensor([dampening_factor]), requires_grad=False)
         self.pseudo_derivative_support = nn.Parameter(
             torch.Tensor([pseudo_derivative_support]), requires_grad=False)
-        self.thr_reparam = nn.Parameter(torch.normal(torch.zeros(self.hidden_size) + thr_mean,
-                                                     math.sqrt(2) * torch.ones(self.hidden_size)))
-        self.thr = torch.sigmoid(self.thr_reparam)
+
+        # initialize thresholds according to the beta distribution with mean 'thr_mean'
+        assert 0 < thr_mean < 1, f"thr_mean must be between 0 and 1, but {thr_mean} was given"
+        beta = 3
+        alpha = beta * thr_mean / (1 - thr_mean)
+        distribution = torch.distributions.beta.Beta(alpha, beta)
+        self.thr = nn.Parameter(distribution.sample(torch.Size([self.hidden_size])))
 
     def to_native_weights(self):
         """
@@ -327,7 +334,7 @@ class EGRU(BaseRNN):
         recurrent_kernel = torch.nn.Parameter(recurrent_kernel)
         bias1 = torch.nn.Parameter(bias1)
         bias2 = torch.nn.Parameter(bias2)
-        thr = torch.nn.Parameter(self.thr_reparam)
+        thr = torch.nn.Parameter(self.thr)
         return kernel, recurrent_kernel, bias1, bias2, thr
 
     def from_native_weights(self, weight_ih_l0, weight_hh_l0, bias_ih_l0, bias_hh_l0, thr):
@@ -354,14 +361,14 @@ class EGRU(BaseRNN):
         self.recurrent_kernel = nn.Parameter(recurrent_kernel)
         self.bias = nn.Parameter(bias)
         self.recurrent_bias = nn.Parameter(recurrent_bias)
-        self.thr_reparam = nn.Parameter(thr)
+        self.thr = nn.Parameter(thr)
 
     def reset_parameters(self):
         """Resets this layer's parameters to their initial values."""
         for k, v in self.named_parameters():
             if k in ['kernel', 'recurrent_kernel', 'bias', 'recurrent_bias']:
                 if v.data.ndimension() >= 2:
-                    nn.init.xavier_normal_(v)
+                    nn.init.xavier_normal_(v, gain=self.weight_initialization_gain)
                 else:
                     nn.init.zeros_(v)
 
@@ -397,10 +404,15 @@ class EGRU(BaseRNN):
         input = self._permute(input)
         state_shape = [1, input.shape[1], self.hidden_size]
         h0 = self._get_state(input, state, state_shape)
-        thr = torch.sigmoid(self.thr_reparam)
+
+        # restrict thresholds to be between 0 and 1
+        self.thr.data.clamp_(min=0.0, max=1.0)
+
+        # run forward pass
         y, h, o, trace = self._impl(
-            input, h0[0], thr, self._get_zoneout_mask(input))
-        state = self._get_final_state(y, lengths)
+            input, h0[0], self.thr, self._get_zoneout_mask(input))
+
+        # prepare outputs
         output = self._permute(y[1:])
         h = self._permute(h[1:])
         o = self._permute(o[1:])

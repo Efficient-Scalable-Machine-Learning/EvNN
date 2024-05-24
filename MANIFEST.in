@@ -1,4 +1,3 @@
-include Makefile
 include frameworks/pytorch/*.h
 include frameworks/pytorch/*.cc
 include lib/*.cc

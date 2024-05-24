@@ -17,8 +17,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import evnn_pytorch as evnn
-from lm.modules import VariationalDropout, WeightDrop
-from lm.embedding_dropout import embedded_dropout
+from modules import VariationalDropout, WeightDrop
+from embedding_dropout import embedded_dropout
 from typing import Union
 
 
@@ -64,9 +64,8 @@ class Decoder(nn.Module):
         bs, seq_len, ninp = x.shape
         if self.project:
             x = x.view(-1, ninp)
-            x = F.relu(self.projection(x))
+            x = self.projection(x)
             x = x.view(bs, seq_len, self.nemb)
-            x = self.variational_dropout(x, self.dropout)
         x = x.view(-1, self.nemb)
         x = self.decoder(x)
         return x
@@ -154,57 +153,6 @@ class LanguageModel(nn.Module):
         self.rnns = nn.ModuleList(self.rnns)
 
         self.backward_sparsity = torch.zeros(len(self.rnns))
-
-    def prune_embeddings(self, index):
-        device = next(self.parameters()).device
-        self.embeddings.weight = nn.Parameter(
-            self.embeddings.weight[:, index]).to(device)
-        self.emb_dim = self.embeddings.weight.shape[1]
-        self.decoder = Decoder(ninp=self.hidden_dim if self.projection else self.emb_dim, ntokens=self.vocab_size,
-                               project=self.projection, nemb=self.emb_dim,
-                               dropout=self.dropout_forward).to(device)
-        self.decoder.decoder.weight = self.embeddings.weight
-
-    def prune(self, fractions, hiddens, device):
-        # calculate new hidden dimensions
-        indicies = [torch.arange(self.rnns[0].input_size).to(device)]
-
-        for i in range(self.nlayers):
-            if isinstance(fractions, float):
-                frac = fractions
-            elif isinstance(fractions, tuple) or isinstance(fractions, list):
-                frac = fractions[i]
-            else:
-                raise NotImplementedError(
-                    f"data type {type(fractions)} not implemented. Use float, tuple or list")
-
-            # get event frequencies
-            hid_dim = hiddens[i].shape[2]
-            hid_cells = hiddens[i].reshape(-1, hid_dim)
-            seq_len = hid_cells.shape[0]
-            spike_frequency = torch.sum(hid_cells != 0, dim=0) / seq_len
-            print(
-                f"Layer {i + 1}: "
-                f"less than 1/100: {torch.sum(spike_frequency < 0.01)} / {spike_frequency.shape} "
-                f"// never: {torch.sum(hid_cells.sum(dim=0) == 0)} / {spike_frequency.shape}")
-
-            # compute remaining indicies from spike frequencies
-            topk = int(self.rnns[i].hidden_size * (1 - frac))
-            hidden_indices, _ = torch.sort(torch.argsort(
-                spike_frequency, descending=True)[:topk], descending=False)
-            hidden_indices = hidden_indices.to(device)
-            indicies.append(hidden_indices)
-
-        # input dimension equals embedding dimension for tied weights
-        indicies[0] = indicies[-1]
-
-        # prune weights
-        for i in range(self.nlayers):
-            self.rnns[i].prune_units(indicies[i], indicies[i+1])
-
-        self.prune_embeddings(indicies[-1])
-        print(
-            f"Final model hidden size: {[rnn.hidden_size for rnn in self.rnns]}")
 
     def init_embedding(self, initrange):
         nn.init.uniform_(self.embeddings.weight, -initrange, initrange)

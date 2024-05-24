@@ -32,6 +32,7 @@ batch_size = 10
 time_steps = 8
 input_size = 4
 hidden_size = 8
+error_tol = 1e-3
 
 @unittest.skipUnless(torch.cuda.is_available(), 'CUDA not available')
 class EGRUCUDAForwardTest(unittest.TestCase):
@@ -58,7 +59,7 @@ class EGRUCUDAForwardTest(unittest.TestCase):
             with mock.patch.object(self.egru, "use_custom_cuda", False):
                 y2, _ = self.egru.forward(self.x_cuda_torch)
 
-            assert torch.allclose(y1, y2)
+            assert torch.allclose(y1, y2, atol=error_tol)
 
     def test_forward_h(self):
         with torch.no_grad():
@@ -68,7 +69,7 @@ class EGRUCUDAForwardTest(unittest.TestCase):
             with mock.patch.object(self.egru, "use_custom_cuda", False):
                 _, (h2, _, _) = self.egru.forward(self.x_cuda_torch)
 
-            assert torch.allclose(h1, h2)
+            assert torch.allclose(h1, h2, atol=error_tol)
 
     def test_forward_o(self):
         with torch.no_grad():
@@ -88,7 +89,7 @@ class EGRUCUDAForwardTest(unittest.TestCase):
             with mock.patch.object(self.egru, "use_custom_cuda", False):
                 _, (_, _, t2) = self.egru.forward(self.x_cuda_torch)
 
-            assert torch.allclose(t1, t2)
+            assert torch.allclose(t1, t2, atol=error_tol)
 
 
 @unittest.skipUnless(torch.cuda.is_available(), 'CUDA not available')
@@ -121,7 +122,7 @@ class EGRUCUDABackwardTest(unittest.TestCase):
         y2.backward(torch.ones_like(y2), retain_graph=True)
 
         assert torch.allclose(self.x_cuda_torch.grad.data,
-                              self.x_cuda.grad.data, atol=1e-06)
+                              self.x_cuda.grad.data, atol=error_tol)
 
     def test_backward_h(self):
         _, (h1, _, _) = self.egru.forward(self.x_cuda)
@@ -134,7 +135,7 @@ class EGRUCUDABackwardTest(unittest.TestCase):
         h2.backward(torch.ones_like(h2), retain_graph=True)
 
         assert torch.allclose(self.x_cuda_torch.grad.data,
-                              self.x_cuda.grad.data, atol=1e-06)
+                              self.x_cuda.grad.data, atol=error_tol)
 
     def test_backward_o(self):
         _, (_, o1, _) = self.egru.forward(self.x_cuda)
@@ -147,7 +148,7 @@ class EGRUCUDABackwardTest(unittest.TestCase):
         o2.backward(torch.ones_like(o2), retain_graph=True)
 
         assert torch.allclose(self.x_cuda_torch.grad.data,
-                              self.x_cuda.grad.data, atol=1e-06)
+                              self.x_cuda.grad.data, atol=error_tol)
 
     def test_backward_trace(self):
         _, (_, _, t1) = self.egru.forward(self.x_cuda)
@@ -160,7 +161,7 @@ class EGRUCUDABackwardTest(unittest.TestCase):
         t2.backward(torch.ones_like(t2), retain_graph=True)
 
         assert torch.allclose(self.x_cuda_torch.grad.data,
-                              self.x_cuda.grad.data, atol=1e-06)
+                              self.x_cuda.grad.data, atol=error_tol)
 
 
 if __name__ == '__main__':

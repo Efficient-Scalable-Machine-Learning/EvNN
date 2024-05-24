@@ -12,21 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
 import argparse
 import math
 import os
 import time
-
+from enum import Enum
 import numpy as np
 import torch
 import yaml
 from torch import nn
 
-import lm.data as d
-from lm import RNNType
-from lm.eval import evaluate
-from lm.models import LanguageModel
+import data as d
+from eval import evaluate
+from models import LanguageModel
+
+
+class RNNType(Enum):
+    LSTM = 'lstm'
+    GRU = 'gru'
+    EGRU = 'egru'
 
 
 def get_args():
@@ -38,7 +42,7 @@ def get_args():
     argparser.add_argument('--epochs', type=int, default=800)
     argparser.add_argument('--batch_size', type=int, default=80)
     argparser.add_argument('--learning_rate', type=float, default=0.0003)
-    argparser.add_argument('--avg_learning_rate', type=float, required=False)
+    argparser.add_argument('--learning_rate_thresholds', type=float, default=1.0)
     argparser.add_argument('--bptt', type=int, default=70)
     argparser.add_argument('--grad_clip', type=float, default=2.0)
     argparser.add_argument('--rnn_type', type=str,
@@ -51,14 +55,12 @@ def get_args():
     argparser.add_argument('--dropout_words', type=float, default=0.1)
     argparser.add_argument('--dropout_forward', type=float, default=0.3)
     argparser.add_argument('--dropout_connect', type=float, default=0.5)
-    argparser.add_argument('--damp_factor', type=float, default=0.7)
     argparser.add_argument('--checkpoint', type=str, required=False, default="")
     argparser.add_argument('--log_interval', type=int, default=1000)
-    argparser.add_argument('--optimizer', type=str, default='adam')
-    argparser.add_argument('--nonmono', type=int, default=5)
+    argparser.add_argument('--scheduler', type=str, default='lambda', choices=['lambda', 'cosine', 'step'])
+    argparser.add_argument('--scheduler_start', type=int, default=200)
     argparser.add_argument('--momentum', type=float, default=0.0)
     argparser.add_argument('--weight_decay', type=float, default=1.2e-6)
-    argparser.add_argument('--thr_init_scale', type=float, default=1.0)
     argparser.add_argument('--alpha', type=float, default=0,
                            help='alpha L2 regularization on RNN activation (alpha = 0 means no regularization)')
     argparser.add_argument('--beta', type=float, default=0,
@@ -66,9 +68,8 @@ def get_args():
     argparser.add_argument('--gamma', type=float, default=0,
                            help='EGRU activity regularization')
     argparser.add_argument('--pseudo_derivative_width', type=float, default=1.0)
-    argparser.add_argument('--thr_init_mean', type=float, default=-2.0)
-    argparser.add_argument('--prune', nargs='*', type=float, default=0.0)
-    argparser.add_argument('--state_decay', type=float, default=0.001)
+    argparser.add_argument('--thr_init_mean', type=float, default=0.2)
+    argparser.add_argument('--weight_init_gain', type=float, default=1.0)
 
     return argparser.parse_args()
 
@@ -84,10 +85,12 @@ def main(args):
     print(device)
 
     # load dataset
-    train_data, val_data, test_data, vocab_size = d.get_data(root=args.data,
-                                                             dset=args.dataset,
-                                                             batch_size=args.batch_size,
-                                                             device=device)
+    train_data, val_data, test_data, vocab_size = d.get_data(
+        root=args.data,
+        dset=args.dataset,
+        batch_size=args.batch_size,
+        device=device
+    )
     print(f"Dataset {args.dataset} has {vocab_size} tokens")
 
     criterion = nn.CrossEntropyLoss()
@@ -112,11 +115,14 @@ def main(args):
     if args.rnn_type == 'lstm' or args.rnn_type == 'gru':
         model = LanguageModel(**model_args)
     elif args.rnn_type == 'egru':
-        model = LanguageModel(**model_args,
-                              dampening_factor=args.damp_factor,
-                              pseudo_derivative_support=args.pseudo_derivative_width,
-                              grad_clip=args.grad_clip,
-                              thr_mean=args.thr_init_mean)
+        model = LanguageModel(
+            **model_args,
+            dampening_factor=args.pseudo_derivative_width,
+            pseudo_derivative_support=args.pseudo_derivative_width,
+            grad_clip=args.grad_clip,
+            thr_mean=args.thr_init_mean,
+            weight_initialization_gain=args.weight_init_gain
+        )
     else:
         raise RuntimeError("Unknown RNN type: %s" % args.rnn_type)
     print("RNN parameters: ", list(map(lambda x: x[0], model.named_parameters())))
@@ -124,30 +130,19 @@ def main(args):
     if len(args.checkpoint) > 0:
         model.load_state_dict(torch.load(args.checkpoint))
     model = model.to(device)
-
-    # MODEL PRUNING
-    pruning = False
-    print(args.prune)
-    if isinstance(args.prune, list) and len(args.prune) == 1:
-        pruning = True
-        args.prune = args.prune[0]
-    elif isinstance(args.prune, list) and len(args.prune) == args.layers:
-        pruning = True
-
-    if pruning:
-        prune(model=model,
-              criterion=criterion,
-              data=train_data,
-              batch_size=args.batch_size,
-              sequence_length=args.bptt,
-              ntokens=vocab_size,
-              device=device,
-              fractions=args.prune)
-
+    # get the dimensions of the hidden state
     if args.rnn_type == 'egru':
         hidden_dims = [rnn.hidden_size for rnn in model.rnns]
     else:
         hidden_dims = [rnn.module.hidden_size if args.dropout_connect > 0 else rnn.hidden_size for rnn in model.rnns]
+
+    config = vars(args)
+    config.update({'num_parameters': sum(p.numel() for p in model.parameters() if p.requires_grad)})
+    config.update({'SLURM_JOB_ID': os.getenv('SLURM_JOB_ID')})
+    print(f"Model Parameter Count: {config['num_parameters']}")
+
+    model_signature = 'rnn_type={0}__nlayers{1}_lr={2}_decay={3}'.format(args.rnn_type, args.layers, args.learning_rate, args.weight_decay)
+
     return_bw_sparsity = True if model.rnn_type == 'egru' else False
 
     config = vars(args)
@@ -155,28 +150,36 @@ def main(args):
     print(f"Model Parameter Count: {config['num_parameters']}")
 
     # setup training
-    param_groups = [{'params': [param for name, param in model.named_parameters() if
-                                'thr' not in name and 'layernorm' not in name]},
-                    {'params'      : [param for name, param in model.named_parameters() if
-                                      'thr' in name or 'layernorm' in name],
-                     'weight_decay': 0}
-                    ]
-    if args.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(param_groups, lr=args.learning_rate, momentum=args.momentum,
-                                    weight_decay=args.weight_decay)
+    param_groups = [
+        # most parameters
+        {'params': [param for name, param in model.named_parameters()
+                    if 'thr' not in name and 'layernorm' not in name]},
+        # layernorm
+        {'params': [param for name, param in model.named_parameters()
+                    if 'layernorm' in name],
+         'weight_decay': 0},
+        # thresholds
+        {'params': [param for name, param in model.named_parameters()
+                    if 'thr' in name],
+         'lr': args.learning_rate * args.learning_rate_thresholds,
+         'weight_decay': 0}
+    ]
+
+    optimizer = torch.optim.AdamW(param_groups, lr=args.learning_rate, weight_decay=args.weight_decay, betas=(args.momentum, 0.999))
+    
+    if args.scheduler == "lambda":
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda ep: 1.0)
-    elif args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(param_groups, lr=args.learning_rate, betas=(args.momentum, 0.999),
-                                     weight_decay=args.weight_decay)
-        milestone = args.epochs // 2
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda ep: 1.0)
-    else:
-        raise NotImplementedError(f'Optimizer {args.optimizer} not implemented')
+    
+    if args.scheduler == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=(args.epochs-args.scheduler_start), eta_min=0)
+
+    if args.scheduler == "step":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=(args.epochs-args.scheduler_start)/4, gamma=args.gamma)
 
     best_val_loss = float('inf')
 
     output_path = os.path.join(args.scratch, args.dataset, args.rnn_type.upper(),
-                               f"{args.rnn_type.upper()}_{time.strftime('%y-%m-%d-%H:%M:%S')}")
+                               f"{model_signature}_{time.strftime('%y-%m-%d-%H:%M:%S')}")
     best_model_path = os.path.join(output_path,
                                    'checkpoints', f'{args.rnn_type.upper()}_best_model.cpt')
     print("Saving model weights to", best_model_path)
@@ -190,81 +193,45 @@ def main(args):
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
 
-        train_results = train(model=model,
-                              train_data=train_data,
-                              optimizer=optimizer,
-                              criterion=criterion,
-                              epoch=epoch,
-                              batch_size=args.batch_size,
-                              bptt=args.bptt,
-                              ntokens=vocab_size,
-                              grad_clip=args.grad_clip,
-                              log_interval=args.log_interval,
-                              device=device,
-                              return_backward_sparsity=return_bw_sparsity)
+        train_results = train(
+            model=model,
+            train_data=train_data,
+            optimizer=optimizer,
+            criterion=criterion,
+            epoch=epoch,
+            batch_size=args.batch_size,
+            bptt=args.bptt,
+            ntokens=vocab_size,
+            grad_clip=args.grad_clip,
+            log_interval=args.log_interval,
+            device=device,
+            return_backward_sparsity=return_bw_sparsity
+        )
+
         if return_bw_sparsity:
             train_loss, bw_sparsity = train_results
         else:
             train_loss = train_results
 
-        # If already averaging
-        if args.optimizer == 'sgd' and 't0' in optimizer.param_groups[0]:
-            if 't0' in optimizer.param_groups[0]:
-                tmp = {}
-                for prm in model.parameters():
-                    tmp[prm] = prm.data.clone()
-                    if 'ax' in optimizer.state[prm]:
-                        prm.data = optimizer.state[prm]['ax'].clone()
+        val_loss, mean_activity, layerwise_activity_mean, layerwise_activity_std, centered_cell_states = \
+            evaluate(
+                model=model,
+                eval_data=val_data,
+                criterion=criterion,
+                batch_size=args.batch_size,
+                bptt=args.bptt,
+                ntokens=vocab_size,
+                hidden_dims=hidden_dims,
+                device=device
+            )
 
-            val_loss, mean_activity, layerwise_activity_mean, layerwise_activity_std, centered_cell_states = \
-                evaluate(model=model,
-                         eval_data=val_data,
-                         criterion=criterion,
-                         batch_size=args.batch_size,
-                         bptt=args.bptt,
-                         ntokens=vocab_size,
-                         device=device)
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                checkpoint_model(model.state_dict(), best_model_path)
-
-            for prm in model.parameters():
-                prm.data = tmp[prm].clone()
-
+        # save best model
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            checkpoint_model(model.state_dict(), best_model_path)
+            n = 0
         else:
-            val_loss, mean_activity, layerwise_activity_mean, layerwise_activity_std, centered_cell_states = \
-                evaluate(model=model,
-                         eval_data=val_data,
-                         criterion=criterion,
-                         batch_size=args.batch_size,
-                         bptt=args.bptt,
-                         ntokens=vocab_size,
-                         device=device)
-
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                checkpoint_model(model.state_dict(), best_model_path)
-                n = 0
-            else:
-                n += 1
-
-            if isinstance(optimizer, torch.optim.SGD) and (
-                    epoch > args.nonmono and n > args.nonmono):
-                print('Switching to ASGD')
-
-                # param_groups are reset by optimizer, we thus have to overwrite the learning rate
-                for pg in param_groups:
-                    if args.avg_learning_rate:
-                        pg['lr'] = args.avg_learning_rate
-
-                # set optimizer and learning rate schedule
-                optimizer = torch.optim.ASGD(param_groups,
-                                             lr=args.learning_rate if not args.avg_learning_rate else args.avg_learning_rate,
-                                             t0=0,
-                                             lambd=0.,
-                                             weight_decay=args.weight_decay)
-                scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda ep: 1.0)
+            n += 1
 
         val_ppl = math.exp(val_loss)
         elapsed = time.time() - epoch_start_time
@@ -272,16 +239,19 @@ def main(args):
         print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
               f'train loss {train_loss:5.2f} | '
               f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f} | mean activity {mean_activity:.4f}')
+
         if return_bw_sparsity:
             mean_bw_sparsity = np.dot(bw_sparsity, np.array(hidden_dims)) / np.sum(np.array(hidden_dims))
             print(f'backward sparsity {mean_bw_sparsity}')
         print('-' * 89)
 
-        scheduler.step()
+        # if the loss diverged to infinity, stop training
+        if np.isnan(val_loss).any():
+            print(f"EXITING DUE TO NAN LOSS {val_loss}")
+            break
 
-        if isinstance(optimizer, torch.optim.Adam) and epoch == milestone:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=milestone,
-                                                                   eta_min=args.learning_rate / 10)
+        if epoch > args.scheduler_start:
+            scheduler.step()
 
     ######################################################################
     # Evaluate the best model on the test dataset
@@ -294,13 +264,16 @@ def main(args):
                                                              device=device)
     model.load_state_dict(torch.load(best_model_path, map_location=device))
     test_loss, test_activity, test_layerwise_activity_mean, test_layerwise_activity_std, centered_cell_states = \
-        evaluate(model=model,
-                 eval_data=test_data,
-                 criterion=criterion,
-                 batch_size=test_batch_size,
-                 bptt=args.bptt,
-                 ntokens=vocab_size,
-                 device=device)
+        evaluate(
+            model=model,
+            eval_data=test_data,
+            criterion=criterion,
+            batch_size=test_batch_size,
+            bptt=args.bptt,
+            ntokens=vocab_size,
+            hidden_dims=hidden_dims,
+            device=device
+        )
 
     test_ppl = math.exp(test_loss)
     print('=' * 89)
@@ -319,22 +292,6 @@ def repackage_hidden(h):
             return h.detach()
         else:
             return tuple(repackage_hidden(v) for v in h)
-
-
-def prune(model, criterion, data, batch_size, sequence_length, ntokens, device, fractions=0.0):
-    print("Pruning model...")
-    test_loss, test_activity, test_layerwise_activity_mean, test_layerwise_activity_std, centered_cell_states, all_hiddens = \
-        evaluate(model=model,
-                 eval_data=data,
-                 criterion=criterion,
-                 batch_size=batch_size,
-                 bptt=sequence_length,
-                 ntokens=ntokens,
-                 device=device,
-                 return_hidden=True)
-
-    model.prune(fractions, all_hiddens, device)
-    print(f"Perplexity before pruning {math.exp(test_loss)}")
 
 
 def train(model,
