@@ -143,6 +143,69 @@ def EGRUScript(
 
     return y, h, o, tr_vals
 
+def EGRUStep(
+        training: bool,
+        zoneout_prob: float,
+        dampening_factor: float,
+        pseudo_derivative_support: float,
+        input,
+        y0,
+        h0,
+        kernel,
+        recurrent_kernel,
+        bias,
+        recurrent_bias,
+        thr,
+        zoneout_mask):
+    """
+    Perform EGRU computation using Pytorch primitives.
+
+    :type training: bool
+    :param zoneout_prob: the probability of zoneout
+    :type zoneout_prob: float
+    :param dampening_factor: This is the dampening factor for the spike function
+    :type dampening_factor: float
+    :param pseudo_derivative_support: float,
+    :type pseudo_derivative_support: float
+    :param input: the input to the RNN, of shape (time_steps, batch_size, input_size)
+    :param y0: previous output
+    :param h0: initial hidden state
+    :param kernel: the input weight matrix
+    :param recurrent_kernel: the recurrent weight matrix
+    :param bias: bias vector
+    :param recurrent_bias: bias for recurrent kernel
+    :param thr: threshold
+    :param zoneout_mask: a mask that is used to randomly set some of the hidden units to zero
+    :return: The output of the EGRU cell, the hidden state, the output of the spike function, and the
+    trace values.
+    """
+
+    batch_size = input.shape[1]
+    hidden_size = recurrent_kernel.shape[0]
+
+    Wx = input @ kernel + bias
+
+    Rh = y0 @ recurrent_kernel + recurrent_bias
+    vx = torch.chunk(Wx, 3, 1)
+    vh = torch.chunk(Rh, 3, 1)
+
+    z = torch.sigmoid(vx[0] + vh[0])
+    r = torch.sigmoid(vx[1] + vh[1])
+    g = torch.tanh(vx[2] + r * vh[2])
+
+    cur_h = (z * h0 + (1 - z) * g)
+    if zoneout_prob:
+        if training:
+            cur_h = (cur_h - h) * zoneout_mask + h
+        else:
+            cur_h = zoneout_prob * h + (1 - zoneout_prob) * h
+    event = SpikeFunction.apply(
+        cur_h - thr, dampening_factor, pseudo_derivative_support)
+    o = event
+    h = cur_h - event * thr
+    y = event * cur_h
+
+    return y, h, o
 
 class EGRUFunction(torch.autograd.Function):
     @staticmethod
@@ -418,6 +481,38 @@ class EGRU(BaseRNN):
         o = self._permute(o[1:])
         trace = self._permute(trace[1:])
         return output, (h, o, trace)
+    
+    def step(self, input, y0=None, h0=None, lengths=None):
+        """
+        Runs a single step of the EGRU Cell.
+
+        """
+        assert input.dim()==2, "Unexpected time dim in input, expected size is (batch, hidden)"
+        state_shape = [input.shape[0], self.hidden_size]
+        y0 = self._get_state(input, y0, state_shape)
+        h0 = self._get_state(input, h0, state_shape)
+
+        # restrict thresholds to be between 0 and 1
+        self.thr.data.clamp_(min=0.0, max=1.0)
+
+        # run forward pass
+        y, h, o = EGRUStep(
+                self.training,
+                self.zoneout,
+                self.dampening_factor,
+                self.pseudo_derivative_support,
+                input.contiguous(),
+                y0.contiguous(),
+                h0.contiguous(),
+                self.kernel.contiguous(),
+                F.dropout(self.recurrent_kernel, self.dropout,
+                          self.training).contiguous(),
+                self.bias.contiguous(),
+                self.recurrent_bias.contiguous(),
+                self.thr,
+                self._get_zoneout_mask(input))
+
+        return y, h, o
 
     def _impl(self, input, state, thr, zoneout_mask):
         if self.use_custom_cuda:
